@@ -69,48 +69,55 @@ def parse_hasil(raw: str):
     return None
 
 
-def kirim_chunk(chunk, system_prompt, instruksi, api_key, bagian, mode_audit):
-    user_message = f"Bagian: {bagian} | Mode: {mode_audit}\nInstruksi: {instruksi}\n\n=== TEKS ===\n{chunk}"
-    url = "https://api.groq.com/openai/v1/chat/completions"
-    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+def kirim_chunk_gemini(chunk, system_prompt, instruksi, api_key, bagian, mode_audit):
+    """Kirim chunk ke Gemini API (gratis, 1500 req/hari)"""
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+    
+    prompt_lengkap = (
+        f"{system_prompt}\n\n"
+        f"Bagian: {bagian} | Mode: {mode_audit}\n"
+        f"Instruksi: {instruksi}\n\n"
+        f"=== TEKS YANG HARUS DIPERIKSA ===\n{chunk}\n\n"
+        f"Balas HANYA dengan JSON valid. Tidak ada teks lain."
+    )
+    
     payload = {
-        "model": "llama-3.3-70b-versatile",
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_message},
-        ],
-        "temperature": 0.1,
-        "max_tokens": 1500,
-        "response_format": {"type": "json_object"},
+        "contents": [{"parts": [{"text": prompt_lengkap}]}],
+        "generationConfig": {
+            "temperature": 0.0,
+            "maxOutputTokens": 2000,
+        }
     }
+    
     try:
-        resp = requests.post(url, headers=headers, json=payload, timeout=60)
+        resp = requests.post(url, json=payload, timeout=60)
         resp.raise_for_status()
         data = resp.json()
-        if "choices" in data:
-            return data["choices"][0]["message"]["content"]
+        
+        if "candidates" in data and data["candidates"]:
+            teks = data["candidates"][0]["content"]["parts"][0]["text"]
+            return teks
         elif "error" in data:
-            st.warning(f"Groq: {data['error']['message']}")
+            st.warning(f"Gemini error: {data['error'].get('message', 'Unknown error')}")
+            
     except requests.exceptions.Timeout:
         st.warning("Timeout. Bagian ini dilewati.")
     except requests.exceptions.HTTPError as e:
         kode = e.response.status_code
-        if kode == 401:
-            st.error("API key tidak valid. Periksa konfigurasi Secrets di Streamlit Cloud.")
+        if kode == 400:
+            st.error("API key tidak valid. Periksa GEMINI_API_KEY di Streamlit Secrets.")
             return "STOP"
         elif kode == 429:
-            st.warning("Rate limit. Menunggu 65 detik...")
-            time.sleep(65)
+            st.warning("Rate limit Gemini. Menunggu 30 detik...")
+            time.sleep(30)
             try:
-                resp = requests.post(url, headers=headers, json=payload, timeout=60)
+                resp = requests.post(url, json=payload, timeout=60)
                 resp.raise_for_status()
                 data = resp.json()
-                if "choices" in data:
-                    return data["choices"][0]["message"]["content"]
+                if "candidates" in data and data["candidates"]:
+                    return data["candidates"][0]["content"]["parts"][0]["text"]
             except Exception:
                 st.warning("Retry gagal. Bagian dilewati.")
-        elif kode == 400:
-            st.warning(f"HTTP 400 pada bagian ini. Pesan: {e.response.text[:200]}")
         else:
             st.warning(f"HTTP {kode}. Bagian dilewati.")
     except Exception as e:
@@ -118,39 +125,65 @@ def kirim_chunk(chunk, system_prompt, instruksi, api_key, bagian, mode_audit):
     return None
 
 
-def panggil_groq(teks_input, mode_audit, bagian):
-    # ── AMAN: API key diambil dari Streamlit Secrets, tidak hardcode ──
+def panggil_gemini(teks_input, mode_audit, bagian):
+    # API key dari Streamlit Secrets
     try:
-        api_key = st.secrets["GROQ_API_KEY"]
+        api_key = st.secrets["GEMINI_API_KEY"]
     except Exception:
-        st.error("❌ API key tidak ditemukan! Tambahkan GROQ_API_KEY di Streamlit Cloud → Settings → Secrets.")
+        st.error("❌ API key tidak ditemukan! Tambahkan GEMINI_API_KEY di Streamlit Cloud → Settings → Secrets.")
         return None
 
     if mode_audit == "Perbaikan Typo / EYD / PUEBI":
-        system_prompt = """Balas dalam format json. Kamu auditor EYD/PUEBI untuk KTI kesehatan.
-Laporkan HANYA kesalahan yang ADA di teks. Jangan mengarang.
-Kolom "salah" = salin PERSIS dari teks. Kolom "ket" = sebutkan aturan spesifik.
-ABAIKAN sitasi seperti (Nama, 2021). HANYA 3 key: salah, benar, ket.
-
-KESALAHAN YANG DICARI:
-- Kata tidak baku: praktek->praktik, apotik->apotek, nasehat->nasihat, ijin->izin, resiko->risiko, aktifitas->aktivitas, prosentase->persentase, sistim->sistem, tehnik->teknik, analisa->analisis, standart->standar, obyek->objek, subyek->subjek, nampak->tampak, merubah->mengubah, jaman->zaman, nafas->napas, isteri->istri, kwalitas->kualitas, kwalitatif->kualitatif, kuisioner->kuesioner, diagnosa->diagnosis, komplek->kompleks, efektifitas->efektivitas, sekedar->sekadar, karir->karier, survey->survei, sample->sampel
-- Awalan di- disambung benda: "di karenakan"->"dikarenakan", "dirumah sakit"->"di rumah sakit"
-- Awalan di- dipisah kata kerja: "di lakukan"->"dilakukan", "di temukan"->"ditemukan", "di peroleh"->"diperoleh", "di gunakan"->"digunakan"
-- Kata ulang spasi salah: "sehari -hari"->"sehari-hari", "lain -lain"->"lain-lain"
-- Kata terpotong: "o leh"->"oleh"
-- Spasi sebelum tanda baca: "mencuci ,"->"mencuci,", "selesai ."->"selesai."
-- Pleonasme: "adalah merupakan"->"adalah"/"merupakan", "agar supaya"->"agar"/"supaya"
-- "dimana" sebagai kata tanya -> "di mana"
-- Huruf kapital salah pada nama instansi atau nama ilmiah
-
+        system_prompt = """Kamu adalah auditor EYD/PUEBI yang SANGAT TELITI untuk Karya Tulis Ilmiah (KTI) kesehatan Indonesia.
+Balas HANYA dengan JSON valid. Tidak ada teks lain selain JSON.
+Format wajib: {"items": [{"salah":"teks asli persis","benar":"teks benar","ket":"aturan yang dilanggar"}]}
 Jika tidak ada kesalahan: {"items": []}
-Format: {"items": [{"salah":"teks asli persis","benar":"teks benar","ket":"aturan yang dilanggar"}]}"""
-        instruksi = "Temukan kesalahan EYD/PUEBI/KBBI. Salin teks salah PERSIS. ABAIKAN sitasi. HANYA 3 kolom."
+
+PERIKSA SETIAP KATA. Laporkan SEMUA kesalahan:
+
+1. KATA TIDAK BAKU → ganti kata baku KBBI:
+praktek→praktik, apotik→apotek, nasehat→nasihat, ijin→izin, resiko→risiko,
+aktifitas→aktivitas, prosentase→persentase, sistim→sistem, tehnik→teknik,
+analisa→analisis, hipotesa→hipotesis, standart→standar, obyek→objek,
+subyek→subjek, nampak→tampak, merubah→mengubah, jaman→zaman,
+nafas→napas, isteri→istri, kwalitas→kualitas, kwalitatif→kualitatif,
+kwantitatif→kuantitatif, kuisioner→kuesioner, lembab→lembap,
+diagnosa→diagnosis, anamnesa→anamnesis, komplek→kompleks,
+efektifitas→efektivitas, sekedar→sekadar, karir→karier,
+survey→survei, sample→sampel, nomer→nomor, jadual→jadwal,
+berfikir→berpikir, fotocopy→fotokopi, menejemen→manajemen
+
+2. AWALAN "di-":
+- di + kata kerja DISAMBUNG: "di lakukan"→"dilakukan", "di temukan"→"ditemukan",
+  "di peroleh"→"diperoleh", "di gunakan"→"digunakan", "di ketahui"→"diketahui",
+  "di analisis"→"dianalisis", "di buat"→"dibuat", "di berikan"→"diberikan",
+  "di ambil"→"diambil", "di uji"→"diuji", "di terapkan"→"diterapkan"
+- di + tempat DIPISAH: "dirumah sakit"→"di rumah sakit", "dipuskesmas"→"di puskesmas",
+  "diIndonesia"→"di Indonesia"
+
+3. KATA ULANG: "sehari - hari"→"sehari-hari", "lain - lain"→"lain-lain",
+"masing - masing"→"masing-masing", "bermacam - macam"→"bermacam-macam"
+
+4. SPASI SEBELUM TANDA BACA: "kata ,"→"kata,", "kata ."→"kata.", "kata :"→"kata:"
+
+5. PLEONASME: "adalah merupakan"→"adalah"/"merupakan", "agar supaya"→"agar"/"supaya",
+"para hadirin"→"hadirin"
+
+6. "dimana" sebagai kata tanya → "di mana"
+
+7. Angka 1-9 dalam kalimat ditulis huruf: "1 orang"→"satu orang"
+
+ABAIKAN: sitasi (Nama, 2021), angka statistik, satuan ukuran."""
+
+        instruksi = "Periksa SETIAP kata. Laporkan SEMUA kesalahan EYD/PUEBI. Salin teks salah PERSIS dari dokumen."
 
     elif mode_audit == "Audit Sitasi APA 7":
-        system_prompt = """Balas dalam format json. Kamu adalah auditor sitasi APA 7 untuk Karya Tulis Ilmiah (KTI) kesehatan.
+        system_prompt = """Kamu adalah auditor sitasi APA 7 untuk KTI kesehatan Indonesia.
+Balas HANYA dengan JSON valid.
+Format: {"items": [{"salah":"sitasi asli persis","benar":"sitasi benar","ket":"aturan APA 7"}]}
+Jika benar semua: {"items": []}
 
-TUGASMU HANYA SATU: cari dan periksa SEMUA sitasi dalam teks.
+UGASMU HANYA SATU: cari dan periksa SEMUA sitasi dalam teks.
 
 === CARA MENGHITUNG JUMLAH PENULIS ===
 PENTING: Penulis dipisahkan oleh TANDA KOMA atau "&" atau kata "dan"/"et al."/"dkk."
@@ -192,33 +225,26 @@ KUNCI: Hitung koma di dalam kurung. Jika koma terakhir diikuti 4 angka = tahun, 
 5. TEKNIS
    - Wajib koma antara nama/institusi dan tahun
    - Tidak boleh spasi sebelum titik/koma: "(Wally, 2021) ." -> SALAH
-   - Tahun harus angka 4 digit
+   - Tahun harus angka 4 digit"""
 
-Output HARUS JSON valid. Jangan tulis apapun selain JSON.
-Jika semua sitasi benar: {"items": []}
-Format: {"items": [{"salah":"sitasi asli persis di teks","benar":"sitasi yang benar","ket":"aturan APA 7 yang dilanggar"}]}"""
-        instruksi = "Cari SEMUA sitasi. Hitung penulis dari koma bukan spasi. Laporkan yang SALAH saja."
+        instruksi = "Periksa SETIAP sitasi. Hitung penulis dari koma. Laporkan SEMUA yang salah."
 
     else:
-        system_prompt = """Balas dalam format json. Kamu adalah auditor daftar pustaka APA 7 untuk Karya Tulis Ilmiah (KTI) kesehatan.
-
-TUGASMU: periksa setiap entri daftar pustaka apakah sudah sesuai APA 7.
+        system_prompt = """Kamu adalah auditor daftar pustaka APA 7 untuk KTI kesehatan Indonesia.
+Balas HANYA dengan JSON valid.
+Format: {"items": [{"salah":"entri salah","benar":"entri benar","ket":"aturan APA 7"}]}
+Jika benar semua: {"items": []}
 
 ATURAN APA 7:
-1. Urutan: Nama_Belakang, I. N. (Tahun). Judul. Penerbit.
-2. Nama belakang didahulukan, diikuti inisial dengan titik
-3. Tahun dalam kurung diikuti titik: (2021).
-4. Judul artikel: huruf kapital hanya di kata pertama dan nama diri
-5. Nama jurnal dicetak miring, diikuti volume(nomor), halaman
-6. DOI format: https://doi.org/...
-7. Urutan alfabetis berdasarkan nama belakang penulis pertama
-8. Dua penulis: Nama1, I. N., & Nama2, I. N. — gunakan "&" bukan "dan"
-9. Tiga atau lebih penulis: tulis semua sampai 20, gunakan & sebelum penulis terakhir
+1. Nama belakang dulu: Santoso, B. (bukan Budi Santoso)
+2. Tahun dalam kurung + titik: (2021).
+3. Dua penulis: Nama1, I., & Nama2, I. — "&" bukan "dan"
+4. Judul artikel: huruf kapital hanya kata pertama dan nama diri
+5. DOI: https://doi.org/10.xxx — bukan "doi:" atau "http://dx.doi.org"
+6. Urutan alfabetis A-Z
+7. Nama jurnal ditulis lengkap"""
 
-Output HARUS JSON valid. Jangan tulis apapun selain JSON.
-Jika semua entri benar: {"items": []}
-Format: {"items": [{"salah":"...","benar":"...","ket":"..."}]}"""
-        instruksi = "Periksa setiap entri daftar pustaka, laporkan yang tidak sesuai APA 7."
+        instruksi = "Periksa SETIAP entri daftar pustaka. Laporkan SEMUA yang tidak sesuai APA 7."
 
     chunks = potong_teks(teks_input, ukuran=1500)
     total = len(chunks)
@@ -226,14 +252,14 @@ Format: {"items": [{"salah":"...","benar":"...","ket":"..."}]}"""
     if total == 1:
         st.info("Memproses 1 bagian teks...")
     else:
-        st.info(f"Dokumen dibagi menjadi **{total} bagian**. Diproses otomatis satu per satu.")
+        st.info(f"Dokumen dibagi menjadi **{total} bagian**. Diproses otomatis.")
 
     progress = st.progress(0, text="Memulai analisis...")
     semua_hasil = []
 
     for i, chunk in enumerate(chunks):
         progress.progress(int((i / total) * 100), text=f"Menganalisis bagian {i+1} dari {total}...")
-        raw = kirim_chunk(chunk, system_prompt, instruksi, api_key, bagian, mode_audit)
+        raw = kirim_chunk_gemini(chunk, system_prompt, instruksi, api_key, bagian, mode_audit)
         if raw == "STOP":
             progress.empty()
             return None
@@ -242,7 +268,7 @@ Format: {"items": [{"salah":"...","benar":"...","ket":"..."}]}"""
             if hasil:
                 semua_hasil.extend(hasil)
         if i < total - 1:
-            time.sleep(3)
+            time.sleep(1)  # Gemini lebih cepat, cukup 1 detik
 
     progress.progress(100, text="Analisis selesai!")
     time.sleep(0.5)
@@ -250,7 +276,7 @@ Format: {"items": [{"salah":"...","benar":"...","ket":"..."}]}"""
 
     seen, unik = set(), []
     for r in semua_hasil:
-        key = r.get("salah", "")
+        key = r.get("salah", "").strip().lower()
         if key and key not in seen:
             seen.add(key)
             unik.append(r)
@@ -261,7 +287,7 @@ Format: {"items": [{"salah":"...","benar":"...","ket":"..."}]}"""
 with st.sidebar:
     st.title("📚 SIPA-KTI")
     st.caption("AI-Powered Library Assistant")
-    st.caption("Powered by Groq · Poltekkes Kemenkes Maluku")
+    st.caption("Powered by Google Gemini · Poltekkes Kemenkes Maluku")
     st.divider()
     mode_audit = st.selectbox("Pilih Fokus Audit:", [
         "Perbaikan Typo / EYD / PUEBI",
@@ -274,7 +300,7 @@ with st.sidebar:
         "Bab V - Penutup/Simpulan", "Daftar Pustaka",
     ])
     st.divider()
-    st.info("**Cara pakai:**\n\nUpload dokumen per bab atau tempel teks. Dokumen panjang otomatis dipotong dan diproses per bagian.")
+    st.info("**Cara pakai:**\n\nUpload dokumen per bab atau tempel teks langsung. Dokumen panjang otomatis dipotong dan diproses per bagian.")
 
 
 # ── AREA UTAMA ────────────────────────────────
@@ -303,7 +329,7 @@ if st.button(f"🔍 Mulai Analisis — {pilihan_bab}", type="primary"):
     if not input_text or not input_text.strip():
         st.error("Silakan upload file atau tempel teks terlebih dahulu!")
     else:
-        results = panggil_groq(input_text, mode_audit, pilihan_bab)
+        results = panggil_gemini(input_text, mode_audit, pilihan_bab)
         if results is None:
             st.error("Analisis dihentikan karena kesalahan API.")
         elif len(results) == 0:
@@ -319,4 +345,4 @@ if st.button(f"🔍 Mulai Analisis — {pilihan_bab}", type="primary"):
             st.download_button(label="⬇️ Unduh Hasil Audit (JSON)", data=hasil_json, file_name=nama_file, mime="application/json")
 
 st.divider()
-st.caption("© 2026 SIPA-KTI · Perpustakaan Terpadu Poltekkes Kemenkes Maluku · Powered by Groq AI")
+st.caption("© 2026 SIPA-KTI · Perpustakaan Terpadu Poltekkes Kemenkes Maluku · Powered by Google Gemini AI")
