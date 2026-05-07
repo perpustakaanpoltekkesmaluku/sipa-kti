@@ -28,7 +28,7 @@ def extract_text(file) -> str:
     return ""
 
 
-def potong_teks(teks: str, ukuran: int = 4000) -> list:
+def potong_teks(teks: str, ukuran: int = 1500) -> list:
     paragraf = teks.split("\n")
     chunks, chunk_saat_ini = [], ""
     for par in paragraf:
@@ -71,7 +71,7 @@ def parse_hasil(raw: str):
 
 def kirim_chunk_gemini(chunk, system_prompt, instruksi, api_key, bagian, mode_audit):
     """Kirim chunk ke Gemini API (gratis, 1500 req/hari)"""
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key={api_key}"
     
     prompt_lengkap = (
         f"{system_prompt}\n\n"
@@ -218,7 +218,7 @@ ATURAN APA 7:
 
         instruksi = "Periksa SETIAP entri daftar pustaka. Laporkan SEMUA yang tidak sesuai APA 7."
 
-    chunks = potong_teks(teks_input, ukuran=4000)
+    chunks = potong_teks(teks_input, ukuran=1500)
     total = len(chunks)
 
     if total == 1:
@@ -240,7 +240,7 @@ ATURAN APA 7:
             if hasil:
                 semua_hasil.extend(hasil)
         if i < total - 1:
-            time.sleep(5)  # Jeda 5 detik antar request
+            time.sleep(1)  # Gemini lebih cepat, cukup 1 detik
 
     progress.progress(100, text="Analisis selesai!")
     time.sleep(0.5)
