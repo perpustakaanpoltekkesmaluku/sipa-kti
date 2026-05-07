@@ -69,46 +69,42 @@ def parse_hasil(raw):
     return []
 
 
-def kirim_gemini(prompt, api_key):
-    # Coba model satu per satu
-    models = ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash", "gemini-1.5-flash"]
+def kirim_groq(prompt, api_keys):
+    url = "https://api.groq.com/openai/v1/chat/completions"
     errors = []
-    for model in models:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+
+    for i, api_key in enumerate(api_keys):
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        }
         payload = {
-            "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {"temperature": 0.0, "maxOutputTokens": 2000}
+            "model": "llama-3.3-70b-versatile",
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": 0.0,
+            "max_tokens": 2000,
+            "response_format": {"type": "json_object"},
         }
         try:
-            r = requests.post(url, json=payload, timeout=30)
+            r = requests.post(url, headers=headers, json=payload, timeout=60)
             if r.status_code == 200:
                 data = r.json()
-                if "candidates" in data and data["candidates"]:
-                    return data["candidates"][0]["content"]["parts"][0]["text"], None
-                else:
-                    errors.append(f"{model}: response kosong")
-            elif r.status_code == 404:
-                errors.append(f"{model}: 404")
-                continue
+                if "choices" in data:
+                    return data["choices"][0]["message"]["content"], None
             elif r.status_code == 429:
-                errors.append(f"{model}: rate limit, tunggu...")
-                time.sleep(30)
-                r2 = requests.post(url, json=payload, timeout=30)
-                if r2.status_code == 200:
-                    data = r2.json()
-                    if "candidates" in data and data["candidates"]:
-                        return data["candidates"][0]["content"]["parts"][0]["text"], None
+                errors.append(f"key{i+1}: rate limit")
+                time.sleep(5)
+                continue
+            elif r.status_code == 401:
+                errors.append(f"key{i+1}: API key tidak valid")
+                continue
             else:
-                try:
-                    err_detail = r.json()
-                except Exception:
-                    err_detail = r.text[:200]
-                errors.append(f"{model}: HTTP {r.status_code} - {err_detail}")
-                if r.status_code in [400, 403]:
-                    break
+                errors.append(f"key{i+1}: HTTP {r.status_code}")
+                continue
         except Exception as e:
-            errors.append(f"{model}: {str(e)}")
+            errors.append(f"key{i+1}: {str(e)}")
             continue
+
     return None, "GAGAL: " + " | ".join(errors)
 
 
@@ -120,6 +116,7 @@ def buat_prompt(mode, bagian, chunk):
         f'{{"items":[{{"salah":"teks asli persis","benar":"koreksi benar","ket":"aturan dilanggar"}}]}}\n'
         f'Jika tidak ada kesalahan: {{"items":[]}}\n\n'
     )
+
     if mode == "Perbaikan Typo / EYD / PUEBI":
         aturan = """PERIKSA SETIAP KATA. Laporkan SEMUA kesalahan:
 
@@ -156,7 +153,7 @@ ABAIKAN: sitasi (Nama, 2021), angka statistik, satuan."""
     elif mode == "Audit Sitasi APA 7":
         aturan = """PERIKSA SETIAP SITASI dalam teks.
 
-HITUNG PENULIS dari koma/& /dan, BUKAN spasi:
+HITUNG PENULIS dari koma/&/dan, BUKAN spasi:
 "(Wally, 2021)"=1 penulis
 "(A, B, 2021)"=2 penulis → wajib &
 "(A, B, C, 2021)"=3 penulis → wajib et al.
@@ -183,7 +180,7 @@ ATURAN APA 7:
     return base + aturan + f"\n\nTEKS:\n{chunk}"
 
 
-def jalankan_analisis(teks, mode, bagian, api_key):
+def jalankan_analisis(teks, mode, bagian, api_keys):
     chunks = potong_teks(teks, ukuran=3000)
     total = len(chunks)
 
@@ -198,20 +195,17 @@ def jalankan_analisis(teks, mode, bagian, api_key):
     for i, chunk in enumerate(chunks):
         progress.progress(int((i / total) * 100), text=f"Menganalisis bagian {i+1} dari {total}...")
         prompt = buat_prompt(mode, bagian, chunk)
-        raw, err = kirim_gemini(prompt, api_key)
+        raw, err = kirim_groq(prompt, api_keys)
 
-        if err:
-            st.error(f"❌ {err}")
-            progress.empty()
-            return None
-
-        if raw:
+        if err and not raw:
+            st.warning(f"Bagian {i+1}: {err}")
+        elif raw:
             hasil = parse_hasil(raw)
             if hasil:
                 semua.extend(hasil)
 
         if i < total - 1:
-            time.sleep(4)
+            time.sleep(2)
 
     progress.progress(100, text="Selesai!")
     time.sleep(0.5)
@@ -230,7 +224,7 @@ def jalankan_analisis(teks, mode, bagian, api_key):
 with st.sidebar:
     st.title("📚 SIPA-KTI")
     st.caption("AI-Powered Library Assistant")
-    st.caption("Powered by Google Gemini · Poltekkes Kemenkes Maluku")
+    st.caption("Powered by Groq AI · Poltekkes Kemenkes Maluku")
     st.divider()
     mode_audit = st.selectbox("Pilih Fokus Audit:", [
         "Perbaikan Typo / EYD / PUEBI",
@@ -274,13 +268,24 @@ if st.button(f"🔍 Mulai Analisis — {pilihan_bab}", type="primary"):
     if not teks:
         st.error("Silakan upload file atau tempel teks terlebih dahulu!")
     else:
-        try:
-            api_key = st.secrets["GEMINI_API_KEY"]
-        except Exception:
-            st.error("❌ GEMINI_API_KEY tidak ditemukan di Streamlit Secrets!")
+        # Ambil semua API key Groq dari Secrets
+        api_keys = []
+        for k in ["GROQ_API_KEY", "GROQ_API_KEY_2", "GROQ_API_KEY_3"]:
+            try:
+                val = st.secrets[k]
+                if val and val.strip():
+                    api_keys.append(val.strip())
+            except Exception:
+                pass
+
+        if not api_keys:
+            st.error("❌ Tidak ada GROQ_API_KEY di Streamlit Secrets!")
+            st.info("Tambahkan: GROQ_API_KEY = \"key_kamu\" di Settings → Secrets")
             st.stop()
 
-        results = jalankan_analisis(teks, mode_audit, pilihan_bab, api_key)
+        st.caption(f"Menggunakan {len(api_keys)} API key Groq")
+
+        results = jalankan_analisis(teks, mode_audit, pilihan_bab, api_keys)
         if results is None:
             pass
         elif len(results) == 0:
@@ -296,4 +301,4 @@ if st.button(f"🔍 Mulai Analisis — {pilihan_bab}", type="primary"):
                                file_name=nama_file, mime="application/json")
 
 st.divider()
-st.caption("© 2026 SIPA-KTI · Perpustakaan Terpadu Poltekkes Kemenkes Maluku · Powered by Google Gemini AI")
+st.caption("© 2026 SIPA-KTI · Perpustakaan Terpadu Poltekkes Kemenkes Maluku · Powered by Groq AI")
