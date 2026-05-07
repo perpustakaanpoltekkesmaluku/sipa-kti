@@ -71,7 +71,7 @@ def parse_hasil(raw: str):
 
 def kirim_chunk_gemini(chunk, system_prompt, instruksi, api_key, bagian, mode_audit):
     """Kirim chunk ke Gemini API (gratis, 1500 req/hari)"""
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}"
     
     prompt_lengkap = (
         f"{system_prompt}\n\n"
@@ -183,7 +183,7 @@ Balas HANYA dengan JSON valid.
 Format: {"items": [{"salah":"sitasi asli persis","benar":"sitasi benar","ket":"aturan APA 7"}]}
 Jika benar semua: {"items": []}
 
-UGASMU HANYA SATU: cari dan periksa SEMUA sitasi dalam teks.
+TUGASMU HANYA SATU: cari dan periksa SEMUA sitasi dalam teks.
 
 === CARA MENGHITUNG JUMLAH PENULIS ===
 PENTING: Penulis dipisahkan oleh TANDA KOMA atau "&" atau kata "dan"/"et al."/"dkk."
