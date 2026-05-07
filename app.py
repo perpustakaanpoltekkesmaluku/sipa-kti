@@ -28,7 +28,7 @@ def extract_text(file) -> str:
     return ""
 
 
-def potong_teks(teks: str, ukuran: int = 1500) -> list:
+def potong_teks(teks: str, ukuran: int = 4000) -> list:
     paragraf = teks.split("\n")
     chunks, chunk_saat_ini = [], ""
     for par in paragraf:
@@ -71,7 +71,7 @@ def parse_hasil(raw: str):
 
 def kirim_chunk_gemini(chunk, system_prompt, instruksi, api_key, bagian, mode_audit):
     """Kirim chunk ke Gemini API (gratis, 1500 req/hari)"""
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
     
     prompt_lengkap = (
         f"{system_prompt}\n\n"
@@ -183,49 +183,21 @@ Balas HANYA dengan JSON valid.
 Format: {"items": [{"salah":"sitasi asli persis","benar":"sitasi benar","ket":"aturan APA 7"}]}
 Jika benar semua: {"items": []}
 
-TUGASMU HANYA SATU: cari dan periksa SEMUA sitasi dalam teks.
+CARA HITUNG PENULIS:
+- Penulis dipisahkan KOMA atau "&" atau "dan" — BUKAN spasi
+- Angka 4 digit di akhir = tahun, bukan penulis
+- "(Wally, 2021)" = 1 penulis
+- "(Paparang A, Sondakh R, 2021)" = 2 penulis → wajib "&"
+- "(Rahantan, Sondakh, Paparang, 2021)" = 3 penulis → wajib et al.
 
-=== CARA MENGHITUNG JUMLAH PENULIS ===
-PENTING: Penulis dipisahkan oleh TANDA KOMA atau "&" atau kata "dan"/"et al."/"dkk."
-BUKAN dipisahkan oleh spasi. Nama satu orang bisa terdiri dari beberapa kata.
-
-Contoh menghitung penulis dengan benar:
-- "(Wally, 2021)" = 1 penulis. Tahun (4 digit) di akhir bukan penulis.
-- "(Paparang A, Sondakh R, 2021)" = 2 penulis: [Paparang A] dan [Sondakh R]. Angka 2021 = tahun.
-- "(Nely Rahmasari, Dhiah Novalina, 2023)" = 2 penulis: [Rahmasari] dan [Novalina].
-- "(Rahantan, Sondakh, Paparang, 2021)" = 3 penulis: wajib et al.
-
-KUNCI: Hitung koma di dalam kurung. Jika koma terakhir diikuti 4 angka = tahun, sisanya penulis.
-
-=== ATURAN APA 7 ===
-
-1. SATU PENULIS
-   - Dalam kurung: (Nama_Belakang, Tahun) -> benar: (Wally, 2021)
-   - SALAH jika ada inisial: (Wally R, 2021) -> harusnya (Wally, 2021)
-   - Di narasi: Wally (2021) -> benar
-
-2. DUA PENULIS
-   - Dalam kurung: wajib "&" -> (Rahmasari & Novalina, 2021)
-     SALAH jika pakai "dan": (Paparang dan Sondakh, 2021)
-     SALAH jika ada inisial: (Paparang A & Sondakh R, 2021) -> harusnya (Paparang & Sondakh, 2021)
-   - Di narasi: wajib "dan" -> Paparang dan Sondakh (2021)
-     SALAH jika pakai "&" di narasi: Paparang & Sondakh (2021)
-
-3. TIGA PENULIS ATAU LEBIH
-   - Dalam kurung: wajib et al. -> (Rahantan et al., 2021)
-     SALAH jika semua nama ditulis: (Rahantan, Sondakh, Paparang, 2021)
-   - SALAH jika pakai dkk.: (Rahantan dkk., 2021) -> harusnya et al.
-   - Di narasi: Rahantan et al. (2021)
-
-4. NAMA INSTITUSI / ORGANISASI
-   - Boleh langsung ditulis lengkap: (Kementerian Kesehatan, 2021) -> BENAR
-   - (WHO, 2021) -> BENAR jika singkatan sudah umum dikenal
-   - Yang SALAH: "ibid." atau "op.cit." -> tidak digunakan di APA 7
-
-5. TEKNIS
-   - Wajib koma antara nama/institusi dan tahun
-   - Tidak boleh spasi sebelum titik/koma: "(Wally, 2021) ." -> SALAH
-   - Tahun harus angka 4 digit"""
+ATURAN APA 7:
+1. SATU PENULIS: (Nama_Belakang, Tahun) — hapus inisial jika ada
+2. DUA PENULIS dalam kurung: wajib "&" bukan "dan"
+   DUA PENULIS di narasi: wajib "dan" bukan "&"
+3. TIGA+ PENULIS: wajib "et al." — BUKAN "dkk."
+4. Wajib koma antara nama dan tahun
+5. "ibid." dan "op.cit." tidak digunakan di APA 7
+6. Institusi boleh ditulis lengkap — bukan kesalahan"""
 
         instruksi = "Periksa SETIAP sitasi. Hitung penulis dari koma. Laporkan SEMUA yang salah."
 
@@ -246,7 +218,7 @@ ATURAN APA 7:
 
         instruksi = "Periksa SETIAP entri daftar pustaka. Laporkan SEMUA yang tidak sesuai APA 7."
 
-    chunks = potong_teks(teks_input, ukuran=1500)
+    chunks = potong_teks(teks_input, ukuran=4000)
     total = len(chunks)
 
     if total == 1:
@@ -268,7 +240,7 @@ ATURAN APA 7:
             if hasil:
                 semua_hasil.extend(hasil)
         if i < total - 1:
-            time.sleep(1)  # Gemini lebih cepat, cukup 1 detik
+            time.sleep(5)  # Jeda 5 detik antar request
 
     progress.progress(100, text="Analisis selesai!")
     time.sleep(0.5)
