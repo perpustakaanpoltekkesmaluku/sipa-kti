@@ -14,6 +14,14 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
+# Model Gemini yang dicoba berurutan (fallback jika satu tidak tersedia)
+GEMINI_MODELS = [
+    "gemini-2.0-flash",
+    "gemini-1.5-flash",
+    "gemini-1.5-flash-latest",
+    "gemini-pro",
+]
+
 
 def extract_text(file) -> str:
     try:
@@ -28,7 +36,7 @@ def extract_text(file) -> str:
     return ""
 
 
-def potong_teks(teks: str, ukuran: int = 1500) -> list:
+def potong_teks(teks: str, ukuran: int = 3000) -> list:
     paragraf = teks.split("\n")
     chunks, chunk_saat_ini = [], ""
     for par in paragraf:
@@ -42,7 +50,7 @@ def potong_teks(teks: str, ukuran: int = 1500) -> list:
             chunk_saat_ini = par + "\n"
     if chunk_saat_ini.strip():
         chunks.append(chunk_saat_ini.strip())
-    return chunks if chunks else [teks[:1500]]
+    return chunks if chunks else [teks[:3000]]
 
 
 def parse_hasil(raw: str):
@@ -66,80 +74,51 @@ def parse_hasil(raw: str):
                 return parsed
         except json.JSONDecodeError:
             pass
-    return None
+    return []
 
 
-def kirim_chunk_gemini(chunk, system_prompt, instruksi, api_key, bagian, mode_audit):
-    """Kirim chunk ke Gemini API (gratis, 1500 req/hari)"""
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key={api_key}"
-    
-    prompt_lengkap = (
-        f"{system_prompt}\n\n"
-        f"Bagian: {bagian} | Mode: {mode_audit}\n"
-        f"Instruksi: {instruksi}\n\n"
-        f"=== TEKS YANG HARUS DIPERIKSA ===\n{chunk}\n\n"
-        f"Balas HANYA dengan JSON valid. Tidak ada teks lain."
-    )
-    
-    payload = {
-        "contents": [{"parts": [{"text": prompt_lengkap}]}],
-        "generationConfig": {
-            "temperature": 0.0,
-            "maxOutputTokens": 2000,
+def coba_model_gemini(prompt, api_key):
+    """Coba semua model Gemini sampai ada yang berhasil."""
+    for model in GEMINI_MODELS:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+        payload = {
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {"temperature": 0.0, "maxOutputTokens": 2000}
         }
-    }
-    
-    try:
-        resp = requests.post(url, json=payload, timeout=60)
-        resp.raise_for_status()
-        data = resp.json()
-        
-        if "candidates" in data and data["candidates"]:
-            teks = data["candidates"][0]["content"]["parts"][0]["text"]
-            return teks
-        elif "error" in data:
-            st.warning(f"Gemini error: {data['error'].get('message', 'Unknown error')}")
-            
-    except requests.exceptions.Timeout:
-        st.warning("Timeout. Bagian ini dilewati.")
-    except requests.exceptions.HTTPError as e:
-        kode = e.response.status_code
-        if kode == 400:
-            st.error("API key tidak valid. Periksa GEMINI_API_KEY di Streamlit Secrets.")
-            return "STOP"
-        elif kode == 429:
-            st.warning("Rate limit Gemini. Menunggu 30 detik...")
-            time.sleep(30)
-            try:
-                resp = requests.post(url, json=payload, timeout=60)
-                resp.raise_for_status()
+        try:
+            resp = requests.post(url, json=payload, timeout=30)
+            if resp.status_code == 200:
                 data = resp.json()
                 if "candidates" in data and data["candidates"]:
-                    return data["candidates"][0]["content"]["parts"][0]["text"]
-            except Exception:
-                st.warning("Retry gagal. Bagian dilewati.")
-        else:
-            st.warning(f"HTTP {kode}. Bagian dilewati.")
-    except Exception as e:
-        st.warning(f"Error: {e}")
-    return None
+                    return data["candidates"][0]["content"]["parts"][0]["text"], None
+            elif resp.status_code == 404:
+                continue  # Coba model berikutnya
+            elif resp.status_code == 400:
+                return None, "API key tidak valid"
+            elif resp.status_code == 429:
+                time.sleep(30)
+                # Retry model yang sama
+                resp2 = requests.post(url, json=payload, timeout=30)
+                if resp2.status_code == 200:
+                    data = resp2.json()
+                    if "candidates" in data and data["candidates"]:
+                        return data["candidates"][0]["content"]["parts"][0]["text"], None
+        except Exception:
+            continue
+    return None, "Semua model Gemini tidak tersedia. Cek API key."
 
 
-def panggil_gemini(teks_input, mode_audit, bagian):
-    # API key dari Streamlit Secrets
-    try:
-        api_key = st.secrets["GEMINI_API_KEY"]
-    except Exception:
-        st.error("❌ API key tidak ditemukan! Tambahkan GEMINI_API_KEY di Streamlit Cloud → Settings → Secrets.")
-        return None
+def buat_prompt(mode_audit, bagian, chunk):
+    base = (
+        f"Kamu adalah auditor akademik yang sangat teliti untuk Karya Tulis Ilmiah (KTI) kesehatan Indonesia.\n"
+        f"Bagian: {bagian}\n\n"
+        f"Balas HANYA dengan JSON valid. Format wajib:\n"
+        f'{{"items": [{{"salah":"teks asli persis dari dokumen","benar":"koreksi benar","ket":"aturan yang dilanggar"}}]}}\n'
+        f'Jika tidak ada kesalahan: {{"items": []}}\n\n'
+    )
 
     if mode_audit == "Perbaikan Typo / EYD / PUEBI":
-        system_prompt = """Kamu adalah auditor EYD/PUEBI yang SANGAT TELITI untuk Karya Tulis Ilmiah (KTI) kesehatan Indonesia.
-Balas HANYA dengan JSON valid. Tidak ada teks lain selain JSON.
-Format wajib: {"items": [{"salah":"teks asli persis","benar":"teks benar","ket":"aturan yang dilanggar"}]}
-Jika tidak ada kesalahan: {"items": []}
-
-PERIKSA SETIAP KATA. Laporkan SEMUA kesalahan:
+        aturan = """PERIKSA SETIAP KATA. Laporkan SEMUA kesalahan:
 
 1. KATA TIDAK BAKU → ganti kata baku KBBI:
 praktek→praktik, apotik→apotek, nasehat→nasihat, ijin→izin, resiko→risiko,
@@ -147,41 +126,36 @@ aktifitas→aktivitas, prosentase→persentase, sistim→sistem, tehnik→teknik
 analisa→analisis, hipotesa→hipotesis, standart→standar, obyek→objek,
 subyek→subjek, nampak→tampak, merubah→mengubah, jaman→zaman,
 nafas→napas, isteri→istri, kwalitas→kualitas, kwalitatif→kualitatif,
-kwantitatif→kuantitatif, kuisioner→kuesioner, lembab→lembap,
-diagnosa→diagnosis, anamnesa→anamnesis, komplek→kompleks,
+kuisioner→kuesioner, diagnosa→diagnosis, komplek→kompleks,
 efektifitas→efektivitas, sekedar→sekadar, karir→karier,
-survey→survei, sample→sampel, nomer→nomor, jadual→jadwal,
-berfikir→berpikir, fotocopy→fotokopi, menejemen→manajemen
+survey→survei, sample→sampel, nomer→nomor, berfikir→berpikir,
+fotocopy→fotokopi, menejemen→manajemen, managemen→manajemen
 
 2. AWALAN "di-":
 - di + kata kerja DISAMBUNG: "di lakukan"→"dilakukan", "di temukan"→"ditemukan",
   "di peroleh"→"diperoleh", "di gunakan"→"digunakan", "di ketahui"→"diketahui",
   "di analisis"→"dianalisis", "di buat"→"dibuat", "di berikan"→"diberikan",
-  "di ambil"→"diambil", "di uji"→"diuji", "di terapkan"→"diterapkan"
+  "di uji"→"diuji", "di terapkan"→"diterapkan", "di rekam"→"direkam"
 - di + tempat DIPISAH: "dirumah sakit"→"di rumah sakit", "dipuskesmas"→"di puskesmas",
-  "diIndonesia"→"di Indonesia"
+  "diIndonesia"→"di Indonesia", "diklinik"→"di klinik"
 
 3. KATA ULANG: "sehari - hari"→"sehari-hari", "lain - lain"→"lain-lain",
 "masing - masing"→"masing-masing", "bermacam - macam"→"bermacam-macam"
 
 4. SPASI SEBELUM TANDA BACA: "kata ,"→"kata,", "kata ."→"kata.", "kata :"→"kata:"
 
-5. PLEONASME: "adalah merupakan"→"adalah"/"merupakan", "agar supaya"→"agar"/"supaya",
+5. PLEONASME: "adalah merupakan"→pilih salah satu, "agar supaya"→pilih salah satu,
 "para hadirin"→"hadirin"
 
 6. "dimana" sebagai kata tanya → "di mana"
 
 7. Angka 1-9 dalam kalimat ditulis huruf: "1 orang"→"satu orang"
 
-ABAIKAN: sitasi (Nama, 2021), angka statistik, satuan ukuran."""
-
-        instruksi = "Periksa SETIAP kata. Laporkan SEMUA kesalahan EYD/PUEBI. Salin teks salah PERSIS dari dokumen."
+ABAIKAN: sitasi (Nama, 2021), angka statistik, satuan ukuran.
+Salin teks SALAH PERSIS dari dokumen termasuk spasinya."""
 
     elif mode_audit == "Audit Sitasi APA 7":
-        system_prompt = """Kamu adalah auditor sitasi APA 7 untuk KTI kesehatan Indonesia.
-Balas HANYA dengan JSON valid.
-Format: {"items": [{"salah":"sitasi asli persis","benar":"sitasi benar","ket":"aturan APA 7"}]}
-Jika benar semua: {"items": []}
+        aturan = """PERIKSA SETIAP SITASI dalam teks.
 
 CARA HITUNG PENULIS:
 - Penulis dipisahkan KOMA atau "&" atau "dan" — BUKAN spasi
@@ -191,34 +165,41 @@ CARA HITUNG PENULIS:
 - "(Rahantan, Sondakh, Paparang, 2021)" = 3 penulis → wajib et al.
 
 ATURAN APA 7:
-1. SATU PENULIS: (Nama_Belakang, Tahun) — hapus inisial jika ada
-2. DUA PENULIS dalam kurung: wajib "&" bukan "dan"
-   DUA PENULIS di narasi: wajib "dan" bukan "&"
-3. TIGA+ PENULIS: wajib "et al." — BUKAN "dkk."
+1. Satu penulis: (Nama_Belakang, Tahun) — hapus inisial jika ada
+2. Dua penulis dalam kurung: wajib "&" bukan "dan"
+   Dua penulis di narasi: wajib "dan" bukan "&"
+3. Tiga+ penulis: wajib "et al." — BUKAN "dkk." atau "dkk"
 4. Wajib koma antara nama dan tahun
 5. "ibid." dan "op.cit." tidak digunakan di APA 7
-6. Institusi boleh ditulis lengkap — bukan kesalahan"""
 
-        instruksi = "Periksa SETIAP sitasi. Hitung penulis dari koma. Laporkan SEMUA yang salah."
+Salin sitasi SALAH PERSIS dari teks."""
 
     else:
-        system_prompt = """Kamu adalah auditor daftar pustaka APA 7 untuk KTI kesehatan Indonesia.
-Balas HANYA dengan JSON valid.
-Format: {"items": [{"salah":"entri salah","benar":"entri benar","ket":"aturan APA 7"}]}
-Jika benar semua: {"items": []}
+        aturan = """PERIKSA SETIAP ENTRI daftar pustaka.
 
 ATURAN APA 7:
-1. Nama belakang dulu: Santoso, B. (bukan Budi Santoso)
+1. Nama belakang dulu: Santoso, B. — bukan Budi Santoso
 2. Tahun dalam kurung + titik: (2021).
 3. Dua penulis: Nama1, I., & Nama2, I. — "&" bukan "dan"
 4. Judul artikel: huruf kapital hanya kata pertama dan nama diri
 5. DOI: https://doi.org/10.xxx — bukan "doi:" atau "http://dx.doi.org"
-6. Urutan alfabetis A-Z
-7. Nama jurnal ditulis lengkap"""
+6. Urutan alfabetis A-Z berdasarkan nama belakang
+7. Nama jurnal ditulis lengkap
 
-        instruksi = "Periksa SETIAP entri daftar pustaka. Laporkan SEMUA yang tidak sesuai APA 7."
+Salin teks SALAH PERSIS dari entri."""
 
-    chunks = potong_teks(teks_input, ukuran=1500)
+    return base + aturan + f"\n\nTEKS:\n{chunk}"
+
+
+def panggil_gemini(teks_input, mode_audit, bagian):
+    try:
+        api_key = st.secrets["GEMINI_API_KEY"]
+    except Exception:
+        st.error("❌ GEMINI_API_KEY tidak ditemukan di Streamlit Secrets!")
+        st.info("Buka Streamlit Cloud → app → ⋮ → Settings → Secrets → tambahkan GEMINI_API_KEY")
+        return None
+
+    chunks = potong_teks(teks_input, ukuran=3000)
     total = len(chunks)
 
     if total == 1:
@@ -231,16 +212,21 @@ ATURAN APA 7:
 
     for i, chunk in enumerate(chunks):
         progress.progress(int((i / total) * 100), text=f"Menganalisis bagian {i+1} dari {total}...")
-        raw = kirim_chunk_gemini(chunk, system_prompt, instruksi, api_key, bagian, mode_audit)
-        if raw == "STOP":
+        prompt = buat_prompt(mode_audit, bagian, chunk)
+        raw, error = coba_model_gemini(prompt, api_key)
+
+        if error:
+            st.error(f"❌ {error}")
             progress.empty()
             return None
+
         if raw:
             hasil = parse_hasil(raw)
             if hasil:
                 semua_hasil.extend(hasil)
+
         if i < total - 1:
-            time.sleep(1)  # Gemini lebih cepat, cukup 1 detik
+            time.sleep(4)
 
     progress.progress(100, text="Analisis selesai!")
     time.sleep(0.5)
@@ -272,7 +258,7 @@ with st.sidebar:
         "Bab V - Penutup/Simpulan", "Daftar Pustaka",
     ])
     st.divider()
-    st.info("**Cara pakai:**\n\nUpload dokumen per bab atau tempel teks langsung. Dokumen panjang otomatis dipotong dan diproses per bagian.")
+    st.info("**Cara pakai:**\n\nUpload dokumen per bab atau tempel teks langsung.")
 
 
 # ── AREA UTAMA ────────────────────────────────
@@ -284,37 +270,47 @@ with col1:
     uploaded_file = st.file_uploader("Upload file PDF atau DOCX", type=["pdf", "docx"])
 with col2:
     st.subheader("Atau Tempel Teks")
-    input_text = st.text_area("Tempel isi dokumen di sini...", height=200, placeholder="Salin dan tempel teks KTI...")
+    input_text = st.text_area("Tempel isi dokumen di sini...", height=200,
+                               placeholder="Salin dan tempel teks KTI...")
 
 if uploaded_file:
     extracted = extract_text(uploaded_file)
     if extracted:
         input_text = extracted
         jumlah_chunks = len(potong_teks(extracted))
-        st.success(f"**{uploaded_file.name}** berhasil dimuat — {len(extracted):,} karakter, akan diproses dalam **{jumlah_chunks} bagian**.")
+        st.success(f"**{uploaded_file.name}** berhasil dimuat — {len(extracted):,} karakter, "
+                   f"akan diproses dalam **{jumlah_chunks} bagian**.")
     else:
         st.warning("File terbaca tapi tidak ada teks yang bisa diekstrak.")
 
 st.divider()
 
 if st.button(f"🔍 Mulai Analisis — {pilihan_bab}", type="primary"):
-    if not input_text or not input_text.strip():
+    teks_analisis = input_text if input_text and input_text.strip() else ""
+    if not teks_analisis:
         st.error("Silakan upload file atau tempel teks terlebih dahulu!")
     else:
-        results = panggil_gemini(input_text, mode_audit, pilihan_bab)
+        results = panggil_gemini(teks_analisis, mode_audit, pilihan_bab)
         if results is None:
-            st.error("Analisis dihentikan karena kesalahan API.")
+            pass  # Error sudah ditampilkan di dalam fungsi
         elif len(results) == 0:
-            st.success(f"✅ Tidak ditemukan kesalahan pada **{pilihan_bab}** untuk mode **{mode_audit}**.")
+            st.success(f"✅ Tidak ditemukan kesalahan pada **{pilihan_bab}** "
+                       f"untuk mode **{mode_audit}**.")
         else:
             st.subheader(f"Hasil Temuan — {pilihan_bab}")
             st.caption(f"Ditemukan **{len(results)}** item yang perlu diperbaiki.")
             kolom_valid = ["salah", "benar", "ket"]
-            results_bersih = [{k: r[k] for k in kolom_valid if k in r} for r in results if r.get("salah")]
+            results_bersih = [{k: r[k] for k in kolom_valid if k in r}
+                              for r in results if r.get("salah")]
             st.table(results_bersih)
             hasil_json = json.dumps(results, ensure_ascii=False, indent=2)
-            nama_file = f"audit_{pilihan_bab.replace(' ', '_').replace('-','').strip()}.json"
-            st.download_button(label="⬇️ Unduh Hasil Audit (JSON)", data=hasil_json, file_name=nama_file, mime="application/json")
+            nama_file = f"audit_{pilihan_bab.replace(' ', '_').replace('-', '').strip()}.json"
+            st.download_button(
+                label="⬇️ Unduh Hasil Audit (JSON)",
+                data=hasil_json,
+                file_name=nama_file,
+                mime="application/json"
+            )
 
 st.divider()
 st.caption("© 2026 SIPA-KTI · Perpustakaan Terpadu Poltekkes Kemenkes Maluku · Powered by Google Gemini AI")
