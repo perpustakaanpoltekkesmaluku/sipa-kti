@@ -153,18 +153,58 @@ ABAIKAN: sitasi (Nama, 2021), angka statistik, satuan."""
     elif mode == "Audit Sitasi APA 7":
         aturan = """PERIKSA SETIAP SITASI dalam teks.
 
-HITUNG PENULIS dari koma/&/dan, BUKAN spasi:
-"(Wally, 2021)"=1 penulis
-"(A, B, 2021)"=2 penulis → wajib &
-"(A, B, C, 2021)"=3 penulis → wajib et al.
+Kamu adalah auditor sitasi APA 7 untuk Karya Tulis Ilmiah (KTI).
 
-ATURAN APA 7:
-1. 1 penulis: (NamaBelakang, Tahun) — hapus inisial
-2. 2 penulis dalam kurung: wajib & bukan "dan"
-   2 penulis di narasi: wajib "dan" bukan &
-3. 3+ penulis: wajib et al. bukan dkk.
-4. Wajib koma antara nama dan tahun
-5. ibid. dan op.cit. tidak dipakai di APA 7"""
+OUTPUT: Balas HANYA dengan JSON valid. Tidak ada teks lain.
+FORMAT: {"items": [{"salah":"sitasi asli persis","benar":"sitasi yang benar","ket":"aturan APA 7 yang dilanggar"}]}
+Jika semua sitasi benar: {"items": []}
+
+TUGASMU: Periksa SETIAP sitasi dalam teks. Laporkan HANYA kesalahan nyata.
+
+=== CARA MENGHITUNG PENULIS ===
+Pisahan penulis: tanda KOMA atau "&" atau "dan" atau "et al." atau "dkk."
+4 angka berurutan di akhir = TAHUN, bukan penulis.
+
+Contoh:
+• "(Wally, 2021)" → 1 penulis [Wally], tahun 2021 ✓
+• "(Paparang A, Sondakh R, 2021)" → 2 penulis [Paparang A] [Sondakh R], ada inisial → SALAH
+• "(Nely Rahmasari, Dhiah Novalina, 2023)" → 2 penulis [Rahmasari] [Novalina] ✓ atau salah format?
+• "(Rahantan, Sondakh, Paparang, 2021)" → 3 penulis → wajib et al.
+
+=== ATURAN APA 7 ===
+
+1. SATU PENULIS
+   ✓ Benar: (Wally, 2021) | Wally (2021)
+   ✗ Salah: (Wally R, 2021) — inisial tidak dipakai dalam sitasi teks
+
+2. DUA PENULIS
+   ✓ Dalam kurung: (Paparang & Sondakh, 2021)
+   ✓ Di narasi: Paparang dan Sondakh (2021)
+   ✗ Salah dalam kurung: (Paparang dan Sondakh, 2021) — harus "&"
+   ✗ Salah di narasi: Paparang & Sondakh (2021) — harus "dan"
+   ✗ Salah: (Paparang A & Sondakh R, 2021) — inisial tidak dipakai
+
+3. TIGA PENULIS ATAU LEBIH
+   ✓ Benar: (Rahantan et al., 2021) | Rahantan et al. (2021)
+   ✗ Salah: (Rahantan, Sondakh, Paparang, 2021) — harus et al.
+   ✗ Salah: (Rahantan dkk., 2021) — APA 7 pakai "et al." bukan "dkk."
+
+4. INSTITUSI / ORGANISASI
+   ✓ SELALU BENAR jika ditulis lengkap: (Kementerian Kesehatan, 2021)
+   ✓ Singkatan umum dikenal: (WHO, 2021), (BPS, 2022)
+   ✗ Jangan paksa institusi untuk disingkat — itu bukan kewajiban APA 7
+   ✗ Jangan laporkan institusi yang ditulis lengkap sebagai kesalahan
+
+5. FORMAT TEKNIS
+   ✓ Wajib koma antara nama dan tahun: (Wally, 2021)
+   ✗ Tidak boleh spasi sebelum titik/koma setelah kurung: "(Wally, 2021) ."
+   ✗ Tidak boleh tanpa koma: (Wally 2021)
+
+=== YANG HARUS DIABAIKAN ===
+• Ejaan di luar sitasi
+• Hal opsional yang bukan kewajiban APA 7
+• Institusi yang ditulis nama lengkapnya — sudah benar
+• Sitasi yang sudah sesuai semua aturan di atas"""
 
     else:
         aturan = """PERIKSA SETIAP ENTRI daftar pustaka.
