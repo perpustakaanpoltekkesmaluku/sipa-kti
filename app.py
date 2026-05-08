@@ -146,8 +146,6 @@ di+tempat DIPISAH: "dirumah sakit"→"di rumah sakit","dipuskesmas"→"di puskes
 
 6. "dimana" sebagai kata tanya → "di mana"
 
-7. Angka 1-9 dalam kalimat → huruf: "1 orang"→"satu orang"
-
 ABAIKAN: sitasi (Nama, 2021), angka statistik, satuan."""
 
     elif mode == "Audit Sitasi APA 7":
