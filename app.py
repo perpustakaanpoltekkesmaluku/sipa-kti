@@ -313,7 +313,7 @@ terutama untuk kalimat yang kompleks atau istilah khusus bidang kesehatan.
 - Untuk sitasi dan daftar pustaka, verifikasi kembali dengan panduan APA 7
 
 📚 **Butuh bantuan lebih lanjut?**
-Kunjungi atau hubungi **Pustakawan Perpustakaan Terpadu Poltekkes Kemenkes Maluku**
+Kunjungi **Pustakawan Perpustakaan Terpadu Poltekkes Kemenkes Maluku** atau hubungi **Perpustakaan@poltekkes-maluku.ac.id**
 untuk konsultasi penulisan KTI, format sitasi APA 7, dan penelusuran referensi ilmiah.""")
 
             hasil_json = json.dumps(results, ensure_ascii=False, indent=2)
