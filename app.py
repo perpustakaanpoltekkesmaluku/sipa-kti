@@ -282,7 +282,7 @@ if st.button(f"🔍 Mulai Analisis — {pilihan_bab}", type="primary"):
             pass
         elif len(results) == 0:
             st.success(f"✅ Tidak ditemukan kesalahan pada **{pilihan_bab}** untuk mode **{mode_audit}**.")
-            st.info("""⚠️ **Catatan Penting:**
+            st.info(""" **Catatan Penting:**
 Hasil analisis ini dihasilkan oleh sistem AI dan mungkin tidak 100% sempurna.
 Kami menyarankan untuk tetap melakukan pengecekan ulang secara manual.
 Jika membutuhkan bantuan lebih lanjut, silakan hubungi pustakawan Poltekkes Kemenkes Maluku.""")
