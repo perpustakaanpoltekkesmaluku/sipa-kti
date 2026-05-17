@@ -293,7 +293,7 @@ Jika membutuhkan bantuan lebih lanjut, silakan hubungi pustakawan Poltekkes Keme
             st.table(bersih)
 
             # Disclaimer dan info kontak
-            st.warning(""" **Catatan Penting — Harap Dibaca:**
+            st.warning(""" **Catatan Penting Harap Dibaca:**
 
 🔍 **Hasil ini perlu diperiksa ulang secara manual.**
 Sistem AI dapat melewatkan beberapa kesalahan atau memberikan saran yang kurang tepat,
