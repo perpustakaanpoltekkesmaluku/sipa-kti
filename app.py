@@ -167,13 +167,7 @@ ATURAN APA 7:
     else:
         aturan = """PERIKSA SETIAP ENTRI daftar pustaka.
 
-ATURAN APA 7:
-1. Nama belakang dulu: Santoso, B. — bukan Budi Santoso
-2. Tahun dalam kurung + titik: (2021).
-3. 2 penulis: Nama1, I., & Nama2, I. — & bukan "dan"
-4. Judul artikel: kapital hanya kata pertama dan nama diri
-5. DOI: https://doi.org/10.xxx
-6. Urutan alfabetis A-Z"""
+Format Dasar (Buku, Jurnal, Website)Nama Penulis: Nama belakang dulu, diikuti inisial nama depan dan tengah.Tahun Terbit: Dalam tanda kurung (2026).Judul: Judul buku/artikel menggunakan sentence case (hanya huruf pertama judul dan nama diri yang kapital).Sumber: Penerbit, URL, atau DOI.2. Aturan Spesifik & Perubahan Penting (Edisi 7)Penulis: Maksimal 20 penulis dicantumkan sebelum menggunakan tanda elipsis (...).Website/Online: Tidak perlu lagi mencantumkan "Diakses dari" (Retrieved from) kecuali jika sumber tersebut berubah drastis dari waktu ke waktu.Tempat Terbit: Lokasi/kota penerbit tidak perlu dicantumkan lagi.DOI: Ditulis sebagai URL (contoh: https://doi.org...).3. Contoh Penulisan Daftar Pustaka (7th Edition)Buku:Nama Belakang, Inisial. (Tahun). *Judul Buku* (Edisi). Penerbit.Contoh: Johnson, M., & Davis, T. (2021). The Modern World of Psychology (2nd ed.). Academic Press.Artikel Jurnal:Penulis. (Tahun). Judul artikel. *Nama Jurnal*, Volume(Isu), Halaman. DOI/URLContoh: Handoko, B.L., et al. (2020). [Judul Artikel]. Nama Jurnal..Website/Artikel Online:Penulis. (Tahun, Bulan Tanggal). *Judul website*. Nama Situs. URLContoh: @WHO. (2021, ...). Judul. Website..
 
     return base + aturan + f"\n\nTEKS:\n{chunk}"
 
