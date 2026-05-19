@@ -149,31 +149,129 @@ di+tempat DIPISAH: "dirumah sakit"→"di rumah sakit","dipuskesmas"→"di puskes
 ABAIKAN: sitasi (Nama, 2021), angka statistik, satuan."""
 
     elif mode == "Audit Sitasi APA 7":
-        aturan = """PERIKSA SETIAP SITASI dalam teks.
+        aturan = """PERIKSA SETIAP SITASI dalam teks. Laporkan SEMUA kesalahan nyata.
 
-HITUNG PENULIS dari koma/&/dan, BUKAN spasi:
-"(Wally, 2021)"=1 penulis
-"(A, B, 2021)"=2 penulis → wajib &
-"(A, B, C, 2021)"=3 penulis → wajib et al.
+=== CARA MENGHITUNG PENULIS ===
+Pisah nama penulis berdasarkan: koma, &, "dan", "et al.", "dkk."
+ANGKA 4 DIGIT di akhir = TAHUN, bukan penulis.
+Contoh:
+- "(Wally, 2021)" → 1 penulis ✓
+- "(Sari & Dewi, 2022)" → 2 penulis ✓
+- "(Sari dan Dewi, 2022)" → 2 penulis, SALAH karena dalam kurung harus "&"
+- "(Rahayu, Sari, Dewi, 2021)" → 3 penulis → WAJIB et al.
+- "(Rahayu dkk., 2021)" → SALAH, APA 7 pakai "et al." bukan "dkk."
 
-ATURAN APA 7:
-1. 1 penulis: (NamaBelakang, Tahun) — hapus inisial
-2. 2 penulis dalam kurung: wajib & bukan "dan"
-   2 penulis di narasi: wajib "dan" bukan &
-3. 3+ penulis: wajib et al. bukan dkk.
-4. Wajib koma antara nama dan tahun
-5. ibid. dan op.cit. tidak dipakai di APA 7"""
+=== ATURAN LENGKAP APA 7 ===
+
+1. SATU PENULIS
+   ✓ Benar: (Wally, 2021) | Wally (2021)
+   ✗ Inisial tidak dipakai: (Wally R., 2021) → (Wally, 2021)
+   ✗ Nama depan lengkap tidak dipakai: (Rudi Wally, 2021) → (Wally, 2021)
+
+2. DUA PENULIS
+   ✓ Dalam kurung: (Sari & Dewi, 2021)
+   ✓ Di narasi teks: Sari dan Dewi (2021)
+   ✗ Dalam kurung pakai "dan": (Sari dan Dewi, 2021) → (Sari & Dewi, 2021)
+   ✗ Di narasi pakai "&": Sari & Dewi (2021) → Sari dan Dewi (2021)
+   ✗ Inisial dalam sitasi: (Sari A. & Dewi B., 2021) → (Sari & Dewi, 2021)
+
+3. TIGA PENULIS ATAU LEBIH
+   ✓ Benar: (Rahayu et al., 2021) | Rahayu et al. (2021)
+   ✗ Tulis semua nama: (Rahayu, Sari, Dewi, 2021) → (Rahayu et al., 2021)
+   ✗ Pakai "dkk.": (Rahayu dkk., 2021) → (Rahayu et al., 2021)
+   ✗ "et al" tanpa titik: (Rahayu et al, 2021) → (Rahayu et al., 2021)
+
+4. INSTITUSI / ORGANISASI
+   ✓ Nama lengkap selalu benar: (Kementerian Kesehatan, 2021), (WHO, 2021)
+   ✓ Singkatan umum yang sudah dikenal luas: WHO, BPS, CDC — boleh langsung
+   ✗ JANGAN laporkan institusi yang ditulis nama lengkap sebagai kesalahan
+
+5. FORMAT TEKNIS
+   ✓ Wajib koma antara nama dan tahun: (Wally, 2021)
+   ✗ Tanpa koma: (Wally 2021) → (Wally, 2021)
+   ✗ ibid. / op.cit. → tidak dipakai di APA 7, ganti dengan sitasi penuh
+
+6. SITASI SEKUNDER
+   ✓ Benar: (Smith, 2010, sebagaimana dikutip dalam Jones, 2021)
+   ✗ Salah: "dikutip dari Smith (2010) dalam Jones (2021)"
+
+7. BEBERAPA SITASI SEKALIGUS
+   ✓ Benar: (Wally, 2021; Sari & Dewi, 2020) — titik koma, urut alfabet
+   ✗ Salah: (Wally, 2021 dan Sari & Dewi, 2020)
+
+=== YANG HARUS DIABAIKAN ===
+- Ejaan kata di luar sitasi
+- Institusi yang ditulis nama lengkap
+- Sitasi yang sudah benar sepenuhnya"""
 
     else:
-        aturan = """PERIKSA SETIAP ENTRI daftar pustaka.
+        aturan = """PERIKSA SETIAP ENTRI daftar pustaka. Laporkan SEMUA kesalahan nyata.
 
-ATURAN APA 7:
-1. Nama belakang dulu: Santoso, B. — bukan Budi Santoso
-2. Tahun dalam kurung + titik: (2021).
-3. 2 penulis: Nama1, I., & Nama2, I. — & bukan "dan"
-4. Judul artikel: kapital hanya kata pertama dan nama diri
-5. DOI: https://doi.org/10.xxx
-6. Urutan alfabetis A-Z"""
+=== ATURAN LENGKAP APA 7 ===
+
+1. FORMAT NAMA PENULIS
+   ✓ Benar: Santoso, B. | Santoso, B., & Rahayu, D.
+   ✗ Nama depan dulu: Budi Santoso → Santoso, B.
+   ✗ Nama lengkap tanpa dibalik: Budi Santoso (2021) → Santoso, B. (2021)
+   ✗ Tanpa inisial: Santoso, (2021) → Santoso, B. (2021)
+   ✗ Lebih dari 20 penulis: tulis 19 nama, lalu elipsis (...), lalu nama terakhir
+   ✗ Pakai "dkk." atau "et al." di daftar pustaka → tulis semua nama penulis
+
+2. TAHUN PENERBITAN
+   ✓ Benar: (2021).
+   ✗ Tanpa kurung: 2021. → (2021).
+   ✗ Tanpa titik setelah kurung: (2021) → (2021).
+
+3. JUDUL ARTIKEL / BAB / LAPORAN
+   ✓ Kapital hanya kata pertama dan nama diri
+   ✓ Tidak dicetak miring (untuk artikel jurnal dan bab buku)
+   ✗ Semua kata kapital: Hubungan Diabetes Dengan Hipertensi → Hubungan diabetes dengan hipertensi
+
+4. NAMA JURNAL / BUKU
+   ✓ Nama jurnal dicetak miring + kapital setiap kata: *Jurnal Kesehatan Masyarakat*
+   ✓ Nama buku dicetak miring: *Metodologi Penelitian Kesehatan*
+   ✗ Nama jurnal tidak miring → tambahkan cetak miring
+   ✗ Nama jurnal disingkat: J. Kes. → tulis nama lengkap jurnal
+
+5. VOLUME, NOMOR, HALAMAN (JURNAL)
+   ✓ Benar: *Nama Jurnal*, *12*(3), 45–58.
+   ✓ Volume miring, nomor dalam kurung tidak miring: *12*(3)
+   ✗ Tidak ada volume/nomor → wajib ditambahkan jika ada
+   ✗ "hal." atau "hlm." sebelum halaman → hapus, langsung angka
+   ✗ Tanda hubung (-) untuk rentang halaman → gunakan en dash (–): 45-58 → 45–58
+
+6. PENERBIT (BUKU)
+   ✓ Benar: Penerbit EGC.
+   ✗ Mencantumkan kota penerbit: Jakarta: EGC → EGC. (APA 7 tidak wajib kota)
+   ✗ Tidak ada penerbit → wajib ditambahkan
+
+7. DOI / URL
+   ✓ DOI benar: https://doi.org/10.1234/contoh
+   ✗ DOI tanpa https: doi:10.1234 → https://doi.org/10.1234
+   ✗ "Diakses dari https://..." → hapus "Diakses dari", langsung tulis URL
+   ✗ "Retrieved from" → hapus, langsung URL
+
+8. SUMBER KHUSUS
+   a. SKRIPSI/TESIS/DISERTASI:
+      ✓ Penulis, A. (Tahun). *Judul* [Skripsi/Tesis/Disertasi, Nama Universitas]. URL
+   b. PERATURAN/UNDANG-UNDANG:
+      ✓ Nama Lembaga. (Tahun). *Judul Peraturan Nomor ... Tahun ... tentang ...*. Nama Lembaga.
+   c. WEBSITE:
+      ✓ Penulis/Lembaga. (Tahun, Tanggal Bulan). *Judul halaman*. Nama Situs. URL
+   d. BUKU DENGAN EDITOR:
+      ✓ Editor, A. (Ed.). (Tahun). *Judul buku*. Penerbit.
+
+9. URUTAN ENTRI
+   ✓ Alfabetis berdasarkan nama belakang penulis pertama (A → Z)
+   ✗ Diurutkan berdasarkan tahun atau nomor urut
+
+10. KONSISTENSI FORMAT
+    ✗ Sebagian entri APA, sebagian Vancouver/Harvard → seragamkan ke APA 7
+
+=== YANG HARUS DIABAIKAN ===
+- Perbedaan font atau ukuran huruf
+- Spasi antar entri
+- Hal yang tidak diwajibkan APA 7"""
 
     return base + aturan + f"\n\nTEKS:\n{chunk}"
 
